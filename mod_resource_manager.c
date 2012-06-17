@@ -19,10 +19,8 @@
 
 #define MODULE_NAME           "mod_resource_manager"
 #define MODULE_VERSION        "0.0.1"
-#define ON                    1
-#define OFF                   0
 
-#define CGROUP_FS_ROOT        "/sys/fs/cgroup/cpu"
+#define CGROUP_APACHE_ROOT    "/sys/fs/cgroup/cpu/apache"
 
 typedef struct dir_config {
 
@@ -30,16 +28,15 @@ typedef struct dir_config {
     const char *host;
     long cpurate;
     
-
 } mrm_config_t;
 
 module AP_MODULE_DECLARE_DATA resource_manager_module;
-apr_file_t *mrm_fp = NULL;
-char *manage_dir = NULL;
-char *manage_file = NULL;
-char *manage_cpu = NULL;
-apr_file_t *manage_fp = NULL;
 
+static char *manage_dir                     = NULL;
+static char *manage_file                    = NULL;
+static char *manage_cpu                     = NULL;
+static apr_file_t *manage_fp                = NULL;
+static request_rec *mrm_request_rec_state   = NULL;
 
 static int resource_manager_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp, server_rec *server)
 {
@@ -60,22 +57,17 @@ static int resource_manager_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *pt
 
 static void *resource_manager_create_config(apr_pool_t *p, server_rec *s)
 {
-    mrm_config_t *conf =
-        (mrm_config_t *)apr_pcalloc(p, sizeof (*conf));
+    mrm_config_t *conf = (mrm_config_t *)apr_pcalloc(p, sizeof (*conf));
 
-    conf->mruby_code = NULL;
-    conf->host = NULL;
-    conf->cpurate = 100000; //100ms
+    conf->mruby_code    = NULL;
+    conf->host          = NULL;
+    conf->cpurate       = 100000; //100ms 100%
 
     return conf;
 }
 
-
-request_rec *mrm_request_rec_state = NULL;
-
 static int ap_mrb_push_request(request_rec *r)
 {
-    //mrm_request_rec_state = (request_rec *)apr_pcalloc(r->pool, sizeof (*mrm_request_rec_state));
     mrm_request_rec_state = r;
     return OK;
 }
@@ -148,14 +140,11 @@ static int resource_manager_atached(request_rec *r)
 {
     mrm_config_t *conf = ap_get_module_config(r->server->module_config, &resource_manager_module);
 
-    ap_log_perror(APLOG_MARK, APLOG_NOTICE, 0 , r->pool, "%s %s: %s %s", MODULE_NAME, __func__, apr_table_get(r->headers_in, "HOST"), conf->host);
-
     if (strcmp(apr_table_get(r->headers_in, "HOST"), conf->host) == 0) {
-        manage_dir  = apr_psprintf(r->pool, "/sys/fs/cgroup/cpu/apache/%s", conf->host);
+        manage_dir  = apr_psprintf(r->pool, "%s/%s", CGROUP_APACHE_ROOT, conf->host);
         manage_file = apr_psprintf(r->pool, "%s/tasks", manage_dir);
         manage_cpu  = apr_psprintf(r->pool, "%s/cpu.cfs_quota_us", manage_dir);
     
-    ap_log_perror(APLOG_MARK, APLOG_NOTICE, 0 , r->pool, "%s %s: %s %s", MODULE_NAME, __func__, manage_dir, manage_cpu);
         apr_dir_make(manage_dir, APR_OS_DEFAULT, r->pool);
     
         if(apr_file_open(&manage_fp, manage_file, APR_WRITE, APR_OS_DEFAULT, r->pool) != APR_SUCCESS){
@@ -182,16 +171,7 @@ static int resource_manager_detached(request_rec *r)
     mrm_config_t *conf = ap_get_module_config(r->server->module_config, &resource_manager_module);
 
     if (strcmp(apr_table_get(r->headers_in, "HOST"), conf->host) == 0) {
-        manage_dir  = apr_psprintf(r->pool, "/sys/fs/cgroup/cpu/apache/%s", conf->host);
-
-/*
-        if(apr_file_open(&manage_fp, manage_file, APR_WRITE, APR_OS_DEFAULT, r->pool) != APR_SUCCESS){
-            return OK;
-        }
-        apr_file_puts("\n", manage_fp);
-        apr_file_flush(manage_fp);
-        apr_file_close(manage_fp);
-*/
+        manage_dir  = apr_psprintf(r->pool, "%s/%s", CGROUP_APACHE_ROOT, conf->host);
 
         if(apr_file_open(&manage_fp, manage_cpu, APR_WRITE, APR_OS_DEFAULT, r->pool) != APR_SUCCESS){
             return OK;
@@ -236,7 +216,7 @@ static void register_hooks(apr_pool_t *p)
 static const command_rec resource_manager_cmds[] = {
 
     AP_INIT_TAKE2("ResourceManagedCPU", set_resource_manager, NULL, RSRC_CONF | ACCESS_CONF, "resource managed host."),
-    AP_INIT_TAKE1("ResourceManagedmruby", set_resource_manager_mruby, NULL, RSRC_CONF | ACCESS_CONF, "hook for handler phase."),
+    AP_INIT_TAKE1("ResourceManagedmruby", set_resource_manager_mruby, NULL, RSRC_CONF | ACCESS_CONF, "resource management by mruby."),
     {NULL}
 };
 

@@ -1,0 +1,9 @@
+require "Resource"
+
+r = Resource::Manager.new()
+
+# 現在Apacheで設定されているCPUの制限Rateを取得
+cur = r.cpurate
+
+# CPUの制限Rateを20%(20ms)に変更
+r.cpurate = 20000
