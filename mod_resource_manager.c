@@ -10,6 +10,7 @@
 #include <mruby.h>
 #include <mruby/proc.h>
 #include <mruby/compile.h>
+#include <mruby/string.h>
 
 #include <unistd.h>
 #include <stdio.h>
@@ -77,7 +78,7 @@ static request_rec *ap_mrb_get_request()
     return mrm_request_rec_state;
 }
 
-mrb_value ap_mrb_set_cpurate(mrb_state *mrb, mrb_value str)
+static mrb_value ap_mrb_set_cpurate(mrb_state *mrb, mrb_value str)
 {
 
     mrb_int ret;
@@ -89,11 +90,27 @@ mrb_value ap_mrb_set_cpurate(mrb_state *mrb, mrb_value str)
     return str;
 }
 
-mrb_value ap_mrb_get_cpurate(mrb_state *mrb, mrb_value str)
+static mrb_value ap_mrb_get_cpurate(mrb_state *mrb, mrb_value str)
 {
     request_rec *r = ap_mrb_get_request();
     mrm_config_t *conf = ap_get_module_config(r->server->module_config, &resource_manager_module);
     return mrb_fixnum_value(conf->cpurate);
+}
+
+static mrb_value ap_mrb_get_request_filename(mrb_state *mrb, mrb_value str)
+{
+    request_rec *r = ap_mrb_get_request();
+    char *val = apr_pstrdup(r->pool, r->filename);
+    return mrb_str_new(mrb, val, strlen(val));
+}
+
+mrb_value ap_mrb_set_request_filename(mrb_state *mrb, mrb_value str)
+{
+    mrb_value val;
+    request_rec *r = ap_mrb_get_request();
+    mrb_get_args(mrb, "o", &val);
+    r->filename = apr_pstrdup(r->pool, RSTRING_PTR(val));
+    return val;
 }
 
 static int ap_mruby_class_init(mrb_state *mrb)
@@ -105,6 +122,8 @@ static int ap_mruby_class_init(mrb_state *mrb)
     class_manager = mrb_define_class_under(mrb, class, "Manager", mrb->object_class);
     mrb_define_method(mrb, class_manager, "cpurate=", ap_mrb_set_cpurate, ARGS_ANY());
     mrb_define_method(mrb, class_manager, "cpurate", ap_mrb_get_cpurate, ARGS_NONE());
+    mrb_define_method(mrb, class_manager, "filename=", ap_mrb_set_request_filename, ARGS_ANY());
+    mrb_define_method(mrb, class_manager, "filename", ap_mrb_get_request_filename, ARGS_NONE());
 
     return OK;
 }
