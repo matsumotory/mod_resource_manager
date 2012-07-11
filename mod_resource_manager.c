@@ -146,7 +146,7 @@ static int cpurate_from_mruby(request_rec *r)
                 , conf->mruby_code
             );
         }
-    struct mrb_parser_state* p = mrb_parse_file(mrb, mrb_file);
+    struct mrb_parser_state* p = mrb_parse_file(mrb, mrb_file, NULL);
     int n = mrb_generate_code(mrb, p->tree);
     mrb_pool_close(p->pool);
     ap_mrb_push_request(r);
